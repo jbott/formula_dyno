@@ -5,11 +5,16 @@ import (
 )
 
 type DataEvent struct {
-	Time time.Time
+	Timestamp time.Time
+	Value     float64
 }
 
 type Input interface {
 	Start() error
 	Stop() error
-	Channel() (<-chan DataEvent, error)
+}
+
+type DataEventEmitter struct {
+	Output chan DataEvent
+	Input
 }
