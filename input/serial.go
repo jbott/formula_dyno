@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tarm/serial"
 )
@@ -16,12 +17,18 @@ const (
 )
 
 type Serial struct {
+	DataEventEmitter
+
 	config   serial.Config
 	stopchan chan struct{}
 }
 
 func NewSerial(cfg serial.Config) Serial {
 	s := Serial{
+		DataEventEmitter: DataEventEmitter{
+			Output: make(chan DataEvent),
+		},
+
 		config:   cfg,
 		stopchan: make(chan struct{}),
 	}
@@ -29,15 +36,29 @@ func NewSerial(cfg serial.Config) Serial {
 	return s
 }
 
-func WaitForDataLineAndSend(port io.Reader, out chan<- string) {
+type LineEvent struct {
+	Timestamp time.Time
+	Data      string
+}
+
+func WaitForDataLineAndSend(port io.Reader, out chan<- LineEvent) {
 	rd := bufio.NewReader(port)
 
-	line, err := rd.ReadString('\n')
-	if err != nil {
-		log.Fatal(err)
-	}
+	for {
+		line, err := rd.ReadString('\n')
+		if err == nil || err == io.EOF {
+			// Send an event
+			now := time.Now()
+			out <- LineEvent{Timestamp: now, Data: strings.TrimRight(line, "\r\n")}
 
-	out <- strings.TrimRight(line, "\n")
+			if err == io.EOF {
+				// Done reading, exit
+				return
+			}
+		} else {
+			log.Fatal(err)
+		}
+	}
 }
 
 func DecodeSerialMessage(str string) (float64, error) {
@@ -60,17 +81,24 @@ func (s *Serial) Run() error {
 		return err
 	}
 
+	// This will ensure our WaitForDataLineAndSend goroutine closes when this
+	// function exits
 	defer port.Close()
 
-	out := make(chan string)
+	out := make(chan LineEvent)
 
 	go WaitForDataLineAndSend(port, out)
 
 	for {
 		select {
-		case data := <-out:
-			// Convert data []byte into a DataEvent and send it
-			log.Print(data)
+		case line_event := <-out:
+			value, err := DecodeSerialMessage(line_event.Data)
+			if err == nil {
+				s.Output <- DataEvent{
+					Timestamp: time.Now(),
+					Value:     value,
+				}
+			}
 
 		case <-s.stopchan:
 			// Done!
