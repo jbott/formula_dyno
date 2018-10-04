@@ -1,7 +1,9 @@
 package input
 
 import (
+	"bufio"
 	"errors"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -27,19 +29,18 @@ func NewSerial(cfg serial.Config) Serial {
 	return s
 }
 
-func WaitForDataAndSend(port *serial.Port, out chan<- []byte) {
-	buf := make([]byte, BUFFER_SIZE)
-	n, err := port.Read(buf)
+func WaitForDataLineAndSend(port io.Reader, out chan<- string) {
+	rd := bufio.NewReader(port)
+
+	line, err := rd.ReadString('\n')
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	out <- buf[:n]
+	out <- strings.TrimRight(line, "\n")
 }
 
-func DecodeSerialMessage(data []byte) (float64, error) {
-	str := string(data)
-
+func DecodeSerialMessage(str string) (float64, error) {
 	parts := strings.SplitN(str, " ", 2)
 	if len(parts) != 2 {
 		return 0.0, errors.New("Serial data malformed")
@@ -61,9 +62,9 @@ func (s *Serial) Run() error {
 
 	defer port.Close()
 
-	out := make(chan []byte)
+	out := make(chan string)
 
-	go WaitForDataAndSend(port, out)
+	go WaitForDataLineAndSend(port, out)
 
 	for {
 		select {
@@ -83,4 +84,5 @@ func (s *Serial) Start() {
 }
 
 func (s *Serial) Stop() {
+	close(s.stopchan)
 }
