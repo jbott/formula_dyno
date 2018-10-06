@@ -75,10 +75,10 @@ func DecodeSerialMessage(str string) (float64, error) {
 	return val, nil
 }
 
-func (s *Serial) Run() error {
+func (s *Serial) Run() {
 	port, err := serial.OpenPort(&s.config)
 	if err != nil {
-		return err
+		return
 	}
 
 	// This will ensure our WaitForDataLineAndSend goroutine closes when this
@@ -102,7 +102,7 @@ func (s *Serial) Run() error {
 
 		case <-s.stopchan:
 			// Done!
-			return nil
+			return
 		}
 	}
 }

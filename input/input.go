@@ -7,6 +7,8 @@ import (
 type DataEvent struct {
 	Timestamp time.Time
 	Value     float64
+	IntValue  uint32
+	RawData   []byte
 }
 
 type Input interface {
